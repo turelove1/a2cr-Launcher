@@ -19,6 +19,10 @@ from a2cr_launcher.meta.manifest import get_version_manifest
 from a2cr_launcher.meta.merge import resolve_meta
 from a2cr_launcher.meta.versions import get_version_meta
 from a2cr_launcher.modpack import import_pack
+from a2cr_launcher.mods import modrinth
+from a2cr_launcher.mods.install import instance_context as mod_instance_context
+from a2cr_launcher.mods.install import install as install_mod
+from a2cr_launcher.mods.install import list_installed as list_installed_mods
 
 
 def _start_game(console: Console, version_id: str, game_dir: Path, memory: str = "4G") -> int:
@@ -94,6 +98,26 @@ def main():
     instance_parser = subparsers.add_parser('instance')
     instance_sub = instance_parser.add_subparsers(dest='instance_action')
     instance_sub.add_parser('list')
+
+    mod_parser = subparsers.add_parser('mod')
+    mod_sub = mod_parser.add_subparsers(dest='mod_action', required=True)
+
+    mod_search = mod_sub.add_parser('search', help='在 Modrinth 搜索模组')
+    mod_search.add_argument('query')
+    mod_search.add_argument('--limit', type=int, default=10)
+    mod_search.add_argument('--instance', help='按这个实例的版本/加载器过滤')
+    mod_search.add_argument('--version', help='Minecraft 版本（不给 --instance 时必填）')
+    mod_search.add_argument('--loader', choices=['forge', 'neoforge', 'fabric', 'quilt'],
+                            help='加载器（不给 --instance 时必填）')
+
+    mod_install = mod_sub.add_parser('install', help='把模组下载到实例')
+    mod_install.add_argument('slug', help='Modrinth 项目 slug，比如 jei')
+    mod_install.add_argument('--instance', required=True)
+    mod_install.add_argument('--version-id', help='指定 Modrinth 版本 id（默认自动选最新兼容版本）')
+    mod_install.add_argument('--no-deps', action='store_true', help='不自动安装前置依赖')
+
+    mod_list = mod_sub.add_parser('list', help='列出实例里已安装的模组')
+    mod_list.add_argument('--instance', required=True)
 
     args = parser.parse_args()
 
@@ -190,6 +214,70 @@ def main():
             table.add_row(item.get("name", ""), item.get("folder", ""), item.get("mc_version", ""),
                           loader_text, item.get("created_at", ""))
         console.print(table)
+
+    elif args.command == 'mod':
+        if args.mod_action == 'search':
+            mc_version, loader = args.version, args.loader
+            if args.instance:
+                try:
+                    _, mc_version, loader, _ = mod_instance_context(args.instance)
+                except ValueError as err:
+                    console.print(f"[red]{err}[/red]")
+                    exit(1)
+            if not mc_version or not loader:
+                console.print("[red]搜索模组需要 --instance，或者同时指定 --version 和 --loader[/red]")
+                exit(1)
+
+            try:
+                hits = modrinth.search(args.query, mc_version, loader, args.limit)
+            except RequestException as err:
+                console.print(f"[red][Network Error] 搜索失败，请检查网络或者代理设置: {err}[/red]")
+                exit(1)
+
+            if not hits:
+                console.print(f"没有找到适配 Minecraft {mc_version} / {loader} 的模组。")
+                exit(0)
+
+            result_table = Table(title=f"Modrinth 搜索结果（{mc_version} / {loader}）")
+            result_table.add_column("名称")
+            result_table.add_column("Slug")
+            result_table.add_column("下载量", justify="right")
+            result_table.add_column("说明")
+            for hit in hits:
+                description = (hit.get("description") or "").replace("\n", " ")
+                if len(description) > 50:
+                    description = description[:50] + "..."
+                result_table.add_row(hit.get("title", ""), hit.get("slug", ""),
+                                     f"{hit.get('downloads', 0):,}", description)
+            console.print(result_table)
+            console.print(f"安装：al mod install <slug> --instance \"{args.instance or '<实例名>'}\"")
+
+        elif args.mod_action == 'install':
+            try:
+                files = install_mod(args.slug, args.instance, args.version_id,
+                                    with_deps=not args.no_deps,
+                                    log=lambda text: console.print(text, markup=False, highlight=False))
+            except (ValueError, RuntimeError, RequestException, OSError) as err:
+                console.print(f"[red]安装失败：{err}[/red]")
+                exit(1)
+            console.print(f"[green]完成，共处理 {len(files)} 个模组文件。[/green]")
+            console.print(f"启动：al launch --instance \"{args.instance}\" --memory 8G")
+
+        elif args.mod_action == 'list':
+            try:
+                files = list_installed_mods(args.instance)
+            except ValueError as err:
+                console.print(f"[red]{err}[/red]")
+                exit(1)
+            if not files:
+                console.print("这个实例还没有安装任何模组。")
+                exit(0)
+            mods_table = Table(title=f"已安装模组（{args.instance}）")
+            mods_table.add_column("文件名")
+            mods_table.add_column("大小", justify="right")
+            for path in files:
+                mods_table.add_row(path.name, f"{path.stat().st_size / 1024 / 1024:.1f} MB")
+            console.print(mods_table)
 
     elif args.command == 'launch':
         if args.instance:

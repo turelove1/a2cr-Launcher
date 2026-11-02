@@ -17,7 +17,7 @@ def _cache_path() -> Path:
 def _read_cache(path: Path) -> dict:
     """读取本地的版本列表缓存，文件不存在/损坏时当作没有缓存。"""
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         return {}

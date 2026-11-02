@@ -67,6 +67,7 @@ def import_pack(path: Path, name: str | None = None, log=print) -> dict:
         description += f" / {plan['loader']} {plan['loader_version']}"
     log(description + "）")
 
+    failed_files: list[dict] = []
     if plan["format"] == "curseforge":
         total = len(plan["files"])
         log(f"解析 {total} 个 CurseForge 文件 ...")
@@ -75,8 +76,14 @@ def import_pack(path: Path, name: str | None = None, log=print) -> dict:
             if count and (done == count or done % 20 == 0):
                 log(f"  已解析 {done}/{count}")
 
-        plan["files"] = curseforge.resolve_files(plan["files"], on_progress=_progress)
+        def _error(item, _exc):
+            log(f"  跳过无法解析的文件：project {item['project']} / file {item['file_id']}")
+
+        plan["files"], failed_files = curseforge.resolve_files(
+            plan["files"], on_progress=_progress, on_error=_error)
         log("文件地址解析完成")
+        if failed_files:
+            log(f"有 {len(failed_files)} 个文件在镜像和官网都查不到，已跳过，其余文件会继续导入")
 
     _install_vanilla(plan["mc_version"], log)
 
@@ -128,6 +135,12 @@ def import_pack(path: Path, name: str | None = None, log=print) -> dict:
     if targets:
         if not download(targets, description="整合包文件"):
             raise RuntimeError("整合包里的文件没有下载完整，重新运行导入命令会继续补下")
+
+    if failed_files:
+        missing_path = Path(directory, "missing-files.txt")
+        lines = [f"project={item['project']} file={item['file_id']} {item['error']}" for item in failed_files]
+        missing_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        log(f"缺少 {len(failed_files)} 个文件，清单已写入 {missing_path}；重新导入会再试一次")
 
     Path(directory, "mods").mkdir(exist_ok=True)
     return meta

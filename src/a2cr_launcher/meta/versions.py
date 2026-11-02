@@ -13,7 +13,7 @@ def _meta_path(version_id: str) -> Path:
 def _read_local(version_id: str) -> dict | None:
     """读取安装时存下来的版本 meta，网络不可用时启动就靠它。"""
     try:
-        with open(_meta_path(version_id), "r", encoding="utf-8") as f:
+        with open(_meta_path(version_id), "r", encoding="utf-8-sig") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
         return None

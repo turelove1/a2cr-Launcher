@@ -72,7 +72,8 @@ def load(name: str) -> dict | None:
     directory = instance_dir(name)
     meta_path = Path(directory, META_FILE)
     try:
-        with open(meta_path, "r", encoding="utf-8") as f:
+        # utf-8-sig：兼容用记事本改过、带 BOM 的 instance.json
+        with open(meta_path, "r", encoding="utf-8-sig") as f:
             meta = json.load(f)
     except (OSError, json.JSONDecodeError):
         return None

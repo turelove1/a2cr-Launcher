@@ -76,3 +76,28 @@ uv run al launch --instance "机械动力" --memory 8G   # 大型整合包可以
 ```bash
 uv run al instance list
 ```
+
+### 下载模组
+
+从 [Modrinth](https://modrinth.com/mods) 搜索模组，直接装进指定实例（自动适配实例的 Minecraft 版本和加载器，并补上前置依赖）：
+
+```bash
+# 在实例的版本/加载器范围内搜索
+uv run al mod search jei --instance "机械动力"
+
+# 安装（自动选最新兼容版本，自动下载 required 依赖）
+uv run al mod install jei --instance "机械动力"
+
+# 只看某个版本、不装依赖
+uv run al mod install jei --instance "机械动力" --version-id <Modrinth 版本 id> --no-deps
+
+# 查看实例里已经装了哪些模组
+uv run al mod list --instance "机械动力"
+```
+
+没有实例时也可以按版本和加载器搜索：
+
+```bash
+uv run al mod search sodium --version 1.21.1 --loader fabric
+```
+

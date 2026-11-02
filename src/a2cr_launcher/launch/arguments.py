@@ -62,7 +62,7 @@ def _build_game_arguments(arg_raw, values):
     return arguments
 
 
-def build_arguments(meta, game_dir: Path, name="a2Cr", max_memory="4G"):
+def build_arguments(meta, game_dir: Path, name="a2Cr", max_memory="16G"):
     version = meta["id"]
     base_version = meta.get("_baseVersion", version)
     main_class = str(meta.get("mainClass") or "")
